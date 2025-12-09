@@ -56,7 +56,6 @@ The included `app.py` is structured as Colab cells. Execute cells sequentially.
 
 ## 한국어 요약
 - **무엇을 하나요?** 한 시트짜리 Excel에서 브랜드별 파워 지표(`_POWER`)와 여러 드라이버(`_TOM`, `_AFFINITY` 등)를 읽어, 12개월 롤링 윈도우마다 Lasso·랜덤포레스트·VAR(Granger, IRF) 분석을 수행합니다. 분석 결과는 두 개의 장형 CSV(`rolling_contrib_long.csv`, `rolling_score_long.csv`)로 저장되고, Streamlit 대시보드가 이를 시각화합니다.
-- **왜 장형(long)으로 바꾸나요?** 월·변수 단위로 정규화된 Score와 월별 기여도(Contribution)를 갖추면, 대시보드에서 브랜드/시점별 필터링과 차트(스택 바, 워터폴, 버블)를 일관되게 그릴 수 있기 때문입니다.
 - **Score 구조**: 네 가지 신호를 0~1로 정규화한 뒤 가중합합니다.
   - `G_s`: Granger 유의성(유/무) 
   - `I_s`: IRF에서 유의한 스텝의 수(지속성·방향성 참고)
