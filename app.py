@@ -29,6 +29,7 @@ import pandas as pd
 from sklearn.preprocessing import StandardScaler
 from sklearn.linear_model import LassoCV
 from sklearn.ensemble import RandomForestRegressor
+from sklearn.metrics import r2_score, mean_absolute_error
 
 from statsmodels.tsa.api import VAR
 
@@ -152,8 +153,10 @@ def rolling_compute_for_brand(
         try:
             lasso.fit(Xs_win, y_win)
             coefs_std = lasso.coef_.astype(float)  # in standardized space
+            y_pred_lasso = lasso.predict(Xs_win)
         except Exception:
             coefs_std = np.zeros(len(drivers), dtype=float)
+            y_pred_lasso = np.full_like(y_win, np.nan, dtype=float)
 
         # contribution: coef_std * x_t_std
         x_t_std = Xs_win[-1]
@@ -161,6 +164,12 @@ def rolling_compute_for_brand(
 
         # coef magnitude for score component (M)
         M_raw = np.abs(coefs_std)
+        try:
+            r2_lasso = float(r2_score(y_win, y_pred_lasso)) if np.all(np.isfinite(y_pred_lasso)) else np.nan
+            mae_lasso = float(mean_absolute_error(y_win, y_pred_lasso)) if np.all(np.isfinite(y_pred_lasso)) else np.nan
+        except Exception:
+            r2_lasso = np.nan
+            mae_lasso = np.nan
 
         # ---------- 2) RandomForest importance (S) ----------
         try:
@@ -171,8 +180,17 @@ def rolling_compute_for_brand(
             )
             rf.fit(X_win, y_win)
             S_raw = rf.feature_importances_.astype(float)
+            y_pred_rf = rf.predict(X_win)
         except Exception:
             S_raw = np.zeros(len(drivers), dtype=float)
+            y_pred_rf = np.full_like(y_win, np.nan, dtype=float)
+
+        try:
+            r2_rf = float(r2_score(y_win, y_pred_rf)) if np.all(np.isfinite(y_pred_rf)) else np.nan
+            mae_rf = float(mean_absolute_error(y_win, y_pred_rf)) if np.all(np.isfinite(y_pred_rf)) else np.nan
+        except Exception:
+            r2_rf = np.nan
+            mae_rf = np.nan
 
         # ---------- 3) VAR 기반 Best Lag + Granger + IRF (G, I, Direction) ----------
         # per driver, fit VAR([power, driver]) on window
@@ -281,6 +299,10 @@ def rolling_compute_for_brand(
         tmp["Power"] = power_t
         tmp["Power_MoM"] = mom
         tmp["Power_YoY"] = yoy
+        tmp["R2_Lasso"] = r2_lasso
+        tmp["MAE_Lasso"] = mae_lasso
+        tmp["R2_RF"] = r2_rf
+        tmp["MAE_RF"] = mae_rf
 
         score_rows.append(tmp)
 
@@ -404,6 +426,8 @@ k1,k2,k3,k4 = st.columns(4)
 power = float(cur_score["Power"].mean()) if "Power" in cur_score.columns and not cur_score.empty else np.nan
 mom   = float(cur_score["Power_MoM"].mean()) if "Power_MoM" in cur_score.columns and not cur_score.empty else np.nan
 yoy   = float(cur_score["Power_YoY"].mean()) if "Power_YoY" in cur_score.columns and not cur_score.empty else np.nan
+r2_display = float(cur_score["R2_Lasso"].mean()) if "R2_Lasso" in cur_score.columns and not cur_score.empty else np.nan
+r2_rf_display = float(cur_score["R2_RF"].mean()) if "R2_RF" in cur_score.columns and not cur_score.empty else np.nan
 
 with k1:
     st.metric("Power", f"{power:.2f}" if np.isfinite(power) else "-", f"{mom:+.2f}" if np.isfinite(mom) else None)
@@ -413,6 +437,14 @@ with k3:
     st.metric("Vars (score)", f"{len(cur_score)}")
 with k4:
     st.metric("Vars (contrib)", f"{len(cur_contrib)}")
+
+def _fmt_metric(x: float) -> str:
+    return f"{x:.3f}" if np.isfinite(x) else "-"
+
+st.caption(
+    "학습 창 내 모델 성능 지표(평균) — "
+    f"Lasso R²: {_fmt_metric(r2_display)}, RF R²: {_fmt_metric(r2_rf_display)}"
+)
 
 st.divider()
 
@@ -460,7 +492,7 @@ with left:
     st.plotly_chart(fig_break, use_container_width=True)
 
     # table (with meta)
-    cols = ["Variable","Index_disp","Score_disp","GrangerP","BestLag","Direction","IRF_Total","M_raw","S_raw"]
+    cols = ["Variable","Index_disp","Score_disp","GrangerP","BestLag","Direction","IRF_Total","M_raw","S_raw","R2_Lasso","R2_RF","MAE_Lasso","MAE_RF"]
     existing = [c for c in cols if c in show.columns]
     show_tbl = show[existing].copy()
     if "Index_disp" in show_tbl.columns:
